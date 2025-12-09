@@ -1,0 +1,76 @@
+# .github/workflows/etf-tracker.yml
+name: ETF Price Tracker
+
+on:
+  # 每天定时执行（UTC时间21:30，对应北京时间05:30）
+  schedule:
+    - cron: '30 21 * * 1-5'  # 周一至周五，UTC 21:30（北京时间05:30）
+  
+  # 支持手动触发
+  workflow_dispatch:
+    inputs:
+      debug:
+        description: 'Debug mode'
+        required: false
+        default: false
+        type: boolean
+
+  # 代码推送时测试（可选）
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/**'
+      - '.github/workflows/**'
+      - 'requirements.txt'
+
+jobs:
+  fetch-etf-prices:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+    
+    - name: Cache pip packages
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Create environment file
+      run: |
+        cat << EOF > .env
+        SUPABASE_URL=${{ secrets.SUPABASE_URL }}
+        SUPABASE_KEY=${{ secrets.SUPABASE_KEY }}
+        ALPHA_VANTAGE_KEY=${{ secrets.ALPHA_VANTAGE_KEY }}
+        FINNHUB_KEY=${{ secrets.FINNHUB_KEY }}
+        EOF
+        cat .env | sed 's/SUPABASE_KEY=.*/SUPABASE_KEY=***/'  # 安全显示
+    
+    - name: Run ETF tracker
+      env:
+        PYTHONPATH: ${{ github.workspace }}
+      run: |
+        python src/main.py
+    
+    - name: Upload logs
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: etf-tracker-logs
+        path: |
+          *.log
+          logs/
+        retention-days: 7
