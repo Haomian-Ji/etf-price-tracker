@@ -26,50 +26,36 @@ on:
 jobs:
   fetch-etf-prices:
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-    
+
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v4
       with:
         python-version: '3.10'
-    
-    - name: Cache pip packages
-      uses: actions/cache@v3
-      with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-
-    
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
-    
-    - name: Create environment file
-      run: |
-        cat << EOF > .env
-        SUPABASE_URL=${{ secrets.SUPABASE_URL }}
-        SUPABASE_KEY=${{ secrets.SUPABASE_KEY }}
-        ALPHA_VANTAGE_KEY=${{ secrets.ALPHA_VANTAGE_KEY }}
-        FINNHUB_KEY=${{ secrets.FINNHUB_KEY }}
-        EOF
-        cat .env | sed 's/SUPABASE_KEY=.*/SUPABASE_KEY=***/'  # 安全显示
-    
+        pip install -r requirements.txt # 这里应该已包含修复后的版本
+
     - name: Run ETF tracker
       env:
-        PYTHONPATH: ${{ github.workspace }}
+        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        # 如果未设置这些可选密钥，其值将为空白字符串，但程序应能处理
+        ALPHA_VANTAGE_KEY: ${{ secrets.ALPHA_VANTAGE_KEY }}
+        FINNHUB_KEY: ${{ secrets.FINNHUB_KEY }}
       run: |
         python src/main.py
-    
+
     - name: Upload logs
       uses: actions/upload-artifact@v4
+      if: always()
       with:
         name: etf-tracker-logs
         path: |
           *.log
-          logs/
         retention-days: 7
