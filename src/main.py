@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 # 添加到路径
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-from src.services.stock_api import StockDataAPI
+from src.services.stock_api import StockDataAPI, AlphaVantageAPI
 from src.services.supabase_client import SupabaseClient
 from src.config import Config
 
@@ -41,13 +41,13 @@ def main():
         
         # 初始化配置和客户端
         config = Config()
+        # 初始化多个数据源
         stock_api = StockDataAPI()
-        supabase_client = SupabaseClient()
+        alpha_vantage_api = None
         
-        # 获取ETF列表
-        etf_symbols = supabase_client.get_etf_list()
-        logger.info(f"需要跟踪的ETF数量: {len(etf_symbols)}")
-        logger.info(f"ETF列表: {', '.join(etf_symbols)}")
+        # 如果有Alpha Vantage密钥，初始化备用API
+        if config.ALPHA_VANTAGE_KEY:
+            alpha_vantage_api = AlphaVantageAPI(config.ALPHA_VANTAGE_KEY)
         
         # 获取价格数据
         successful_count = 0
@@ -57,8 +57,13 @@ def main():
             try:
                 logger.info(f"正在处理: {symbol}")
                 
-                # 获取ETF价格数据
+                # 首先尝试 yfinance
                 etf_price = stock_api.get_etf_price(symbol)
+                
+                # 如果 yfinance 失败，尝试 Alpha Vantage（如果可用）
+                if not etf_price and alpha_vantage_api:
+                    logger.info(f"yfinance 失败，尝试 Alpha Vantage 获取 {symbol}")
+                    etf_price = alpha_vantage_api.get_etf_price(symbol)
                 
                 if etf_price:
                     # 检查是否已存在
@@ -74,13 +79,13 @@ def main():
                         logger.info(f"⏭️ {symbol} 数据已存在，跳过")
                 else:
                     failed_symbols.append(symbol)
-                    logger.warning(f"⚠️  {symbol} 数据获取失败")
+                    logger.warning(f"⚠️  {symbol} 数据获取失败（所有数据源）")
                     
             except Exception as e:
                 failed_symbols.append(symbol)
                 logger.error(f"处理 {symbol} 时出错: {str(e)}")
                 continue
-        
+            
         # 输出执行结果
         logger.info("=== 执行结果汇总 ===")
         logger.info(f"成功处理: {successful_count}/{len(etf_symbols)}")
