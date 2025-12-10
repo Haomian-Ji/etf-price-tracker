@@ -1,4 +1,3 @@
-# src/main.py
 #!/usr/bin/env python3
 """
 ETF价格跟踪器 - GitHub Actions版本
@@ -39,15 +38,42 @@ def main():
         logger.info("=== ETF价格跟踪器开始执行 ===")
         logger.info(f"执行时间: {datetime.now()}")
         
-        # 初始化配置和客户端
+        # 初始化配置
         config = Config()
-        # 初始化多个数据源
+        
+        # 检查关键配置
+        if not config.SUPABASE_URL or not config.SUPABASE_KEY:
+            logger.error("❌ 关键配置缺失，无法继续执行")
+            logger.error(f"SUPABASE_URL: {'已设置' if config.SUPABASE_URL else '未设置'}")
+            logger.error(f"SUPABASE_KEY: {'已设置' if config.SUPABASE_KEY else '未设置'}")
+            sys.exit(1)
+        
+        # 初始化数据源
         stock_api = StockDataAPI()
         alpha_vantage_api = None
         
         # 如果有Alpha Vantage密钥，初始化备用API
         if config.ALPHA_VANTAGE_KEY:
             alpha_vantage_api = AlphaVantageAPI(config.ALPHA_VANTAGE_KEY)
+        else:
+            logger.info("未配置Alpha Vantage API密钥，仅使用yfinance")
+        
+        # 初始化Supabase客户端
+        supabase_client = SupabaseClient()
+        
+        # 获取ETF列表 - 这是之前缺失的关键步骤！
+        try:
+            etf_symbols = supabase_client.get_etf_list()
+            logger.info(f"从数据库获取到 {len(etf_symbols)} 个ETF需要跟踪")
+            logger.info(f"ETF列表: {', '.join(etf_symbols)}")
+        except Exception as e:
+            logger.error(f"获取ETF列表失败: {str(e)}")
+            logger.info(f"使用默认ETF列表")
+            etf_symbols = config.DEFAULT_ETF_SYMBOLS
+        
+        if not etf_symbols:
+            logger.error("没有需要跟踪的ETF，任务结束")
+            sys.exit(0)
         
         # 获取价格数据
         successful_count = 0
@@ -85,7 +111,7 @@ def main():
                 failed_symbols.append(symbol)
                 logger.error(f"处理 {symbol} 时出错: {str(e)}")
                 continue
-            
+        
         # 输出执行结果
         logger.info("=== 执行结果汇总 ===")
         logger.info(f"成功处理: {successful_count}/{len(etf_symbols)}")

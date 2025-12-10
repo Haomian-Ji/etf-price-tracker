@@ -76,14 +76,19 @@ class SupabaseClient:
     def get_etf_list(self) -> List[str]:
         """从数据库获取ETF列表"""
         try:
-            response = self.client.table(self.config.ETF_LIST_TABLE).select("symbol").execute()
-            symbols = [item["symbol"] for item in response.data]
+            response = self.client.table(self.config.ETF_LIST_TABLE)\
+                                .select("symbol")\
+                                .eq("is_active", True)\
+                                .execute()
             
-            if not symbols:
-                symbols = self.config.DEFAULT_ETF_SYMBOLS
+            if response.data:
+                symbols = [item["symbol"] for item in response.data]
+                logger.info(f"从数据库获取到 {len(symbols)} 个活跃ETF")
+                return symbols
+            else:
+                logger.warning("数据库中没有活跃的ETF，使用默认列表")
+                return self.config.DEFAULT_ETF_SYMBOLS
                 
-            return symbols
-            
         except Exception as e:
             logger.error(f"获取ETF列表时出错: {str(e)}")
             return self.config.DEFAULT_ETF_SYMBOLS
